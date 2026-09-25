@@ -1,0 +1,9 @@
+device_id,fault_type,failure_time
+hub_05,power_fault,2026-02-24 15:00:00
+hub_11,power_fault,2026-02-25 23:00:00
+hub_12,bearing_wear,2026-02-18 08:00:00
+hub_13,overheating,2026-02-03 05:00:00
+hub_17,power_fault,2026-02-14 11:00:00
+hub_18,bearing_wear,2026-02-12 01:00:00
+hub_20,power_fault,2026-02-06 14:00:00
+hub_22,overheating,2026-02-18 23:00:00
