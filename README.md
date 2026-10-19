@@ -69,3 +69,8 @@ python src/infer.py           # alerts: python src/infer.py [readings_csv]
 - **The precision caveat is documented, not hidden:** the contamination
   threshold is one knob, and I report the full tradeoff so the operating
   point can be re-tuned per device fleet.
+
+## Tests and examples
+- `pytest tests/` — 12 unit tests for the windowing pipeline (`tests/test_preprocess.py`)
+- `python examples/preprocess_walkthrough.py` — self-contained demo of the
+  windowing + feature-engineering pipeline on synthetic data (no data files needed)
