@@ -71,6 +71,6 @@ python src/infer.py           # alerts: python src/infer.py [readings_csv]
   point can be re-tuned per device fleet.
 
 ## Tests and examples
-- `pytest tests/` — 12 unit tests for the windowing pipeline (`tests/test_preprocess.py`)
+- `pytest tests/` — 26 unit tests: 12 for the windowing pipeline (`tests/test_preprocess.py`), 14 for the training pipeline (`tests/test_train.py`: model fitting + sustained-alert lead times)
 - `python examples/preprocess_walkthrough.py` — self-contained demo of the
   windowing + feature-engineering pipeline on synthetic data (no data files needed)

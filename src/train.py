@@ -24,6 +24,48 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(os.path.dirname(HERE), "models")
 
 
+def fit_model(X_train):
+    """Fit the scaler + Isolation Forest on healthy windows only.
+
+    Returns (model, scaler). The operating point (contamination=0.03) tunes
+    for recall: in predictive maintenance a missed failure costs far more
+    than a false alarm, so the threshold is a single knob the operator can
+    turn. random_state=42 keeps retrains reproducible.
+    """
+    scaler = StandardScaler().fit(X_train)
+    iso = IsolationForest(n_estimators=300, contamination=0.03,
+                          random_state=42, n_jobs=-1)
+    iso.fit(scaler.transform(X_train))
+    return iso, scaler
+
+
+def sustained_lead_times(windows, faults, prefill_h=PREFAIL_H):
+    """Detection lead time (hours) per failure, from sustained alerts.
+
+    `windows` needs device_id, window_end and pred (1 = flagged anomaly);
+    `faults` needs device_id and failure_time. For each failure, the lead
+    time is failure_time minus the first of two consecutive flagged windows
+    inside the prefailure period. Requiring a run of 2 keeps stray
+    single-window false alarms from inflating the lead time. Failures with
+    no sustained alert contribute nothing.
+    """
+    windows = windows.copy()
+    windows["window_end"] = pd.to_datetime(windows["window_end"])
+    leads = []
+    for _, row in faults.iterrows():
+        ft = pd.to_datetime(row["failure_time"])
+        dev = windows[windows["device_id"] == row["device_id"]].copy()
+        dev = dev[(dev["window_end"] < ft) &
+                  (dev["window_end"] >= ft - pd.Timedelta(hours=prefill_h))]
+        dev = dev.sort_values("window_end").reset_index(drop=True)
+        for i in range(len(dev) - 1):
+            if dev.loc[i, "pred"] == 1 and dev.loc[i + 1, "pred"] == 1:
+                leads.append((ft - dev.loc[i, "window_end"])
+                             .total_seconds() / 3600.0)
+                break
+    return leads
+
+
 def main():
     df = load_windows()
     X = df[FEATURE_COLS].to_numpy()
@@ -36,15 +78,8 @@ def main():
     train_idx = healthy[healthy["window_end"] <= cutoff].index
     X_train = X[train_idx]
 
-    scaler = StandardScaler().fit(X_train)
+    iso, scaler = fit_model(X_train)
     Xs = scaler.transform(X)
-
-    # Operating point: contamination=0.03. In predictive maintenance a missed
-    # failure costs far more than a false alarm, so we tune for recall; the
-    # threshold is a single knob the operator can turn.
-    iso = IsolationForest(n_estimators=300, contamination=0.03,
-                          random_state=42, n_jobs=-1)
-    iso.fit(scaler.transform(X_train))
     pred = (iso.predict(Xs) == -1).astype(int)  # 1 = anomaly
 
     precision, recall, f1, _ = precision_recall_fscore_support(
@@ -58,25 +93,9 @@ def main():
     # detection lead time per failure: first flagged window before the failure
     df = df.copy()
     df["pred"] = pred
-    df["window_end"] = pd.to_datetime(df["window_end"])
     faults = pd.read_csv(os.path.join(
         os.path.dirname(HERE), "data", "faults.csv"))
-    # Detection lead time: for each failure, the earliest *sustained* alert —
-    # first of two consecutive flagged windows inside the prefailure period.
-    # Requiring a run of 2 keeps stray single-window false alarms from
-    # inflating the lead time.
-    leads = []
-    for _, row in faults.iterrows():
-        ft = pd.to_datetime(row["failure_time"])
-        dev = df[(df["device_id"] == row["device_id"])].copy()
-        dev = dev[(dev["window_end"] < ft) &
-                  (dev["window_end"] >= ft - pd.Timedelta(hours=PREFAIL_H))]
-        dev = dev.sort_values("window_end").reset_index(drop=True)
-        for i in range(len(dev) - 1):
-            if dev.loc[i, "pred"] == 1 and dev.loc[i + 1, "pred"] == 1:
-                leads.append((ft - dev.loc[i, "window_end"])
-                             .total_seconds() / 3600.0)
-                break
+    leads = sustained_lead_times(df, faults)
     detected = len(leads)
     if leads:
         print(f"failures with sustained alert: {detected}/{len(faults)}")
